@@ -525,6 +525,37 @@ describe('paper placeOrder guard + validation', () => {
       /symbol required/,
     );
   });
+
+  it('surfaces broker rejection even when status is not 5', async () => {
+    // BlackBull-style symbol-mapping failure: broker resolves a result with a
+    // failure message but a non-rejected status (e.g. inactive=3) -> must error.
+    const deps = {
+      evaluate: async () => ({ desktop: true, ...PAPER_CONNECTED }),
+      evaluateAsync: async () => ({ error: 'Order rejected: Cannot map symbol:BTCUSD', status: 'inactive' }),
+    };
+    await assert.rejects(
+      () => placeOrder({ side: 'buy', type: 'market', qty: 0.01, symbol: 'BTCUSD', _deps: deps }),
+      /Cannot map symbol:BTCUSD/,
+    );
+  });
+
+  it('generated placeOrder CDP expression parses and confirms via order history', async () => {
+    let asyncExpr = '';
+    const deps = {
+      evaluate: async () => ({ desktop: true, ...PAPER_CONNECTED }),
+      evaluateAsync: async (expr) => { asyncExpr = expr; return { result: { order_id: null } }; },
+    };
+    await placeOrder({ side: 'buy', type: 'market', qty: 0.01, symbol: 'BLACKBULL:BTCUSD', _deps: deps });
+    // The injected page-side expression must be syntactically valid.
+    assert.doesNotThrow(() => new Function(asyncExpr));
+    // Confirmation is driven by a delta in ab.ordersHistory() (new order id on
+    // this symbol/side), not a stale-position or toast-count heuristic.
+    assert.match(asyncExpr, /ordersHistory/);
+    assert.match(asyncExpr, /beforeIds/);
+    assert.match(asyncExpr, /tvOrderMatches/);
+    // Toasts are only a reason extractor, never the success/failure decision.
+    assert.match(asyncExpr, /tvRejectToasts/);
+  });
 });
 
 describe('paper mutation tools', () => {

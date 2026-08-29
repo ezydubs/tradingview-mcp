@@ -5,6 +5,7 @@ import { evaluate, safeString } from '../connection.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 const DIALOG = '[data-name="indicators-dialog"]';
+const MAX_VISIBLE_INDICATORS = 2;
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -109,6 +110,9 @@ export async function addStudyFromSearch({ query, match, section } = {}) {
   const want = String(match || query).trim();
 
   const before = await evaluate(`${CHART_API}.getAllStudies().map(function(s){return s.id;})`);
+  if (before && before.length >= MAX_VISIBLE_INDICATORS) {
+    throw new Error(`Maximum ${MAX_VISIBLE_INDICATORS} visible indicators at a time on chart. More than ${MAX_VISIBLE_INDICATORS} will not work. Remove an existing indicator first.`);
+  }
 
   await openDialog();
   await typeQuery(query);

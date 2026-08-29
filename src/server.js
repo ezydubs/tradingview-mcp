@@ -14,7 +14,7 @@ import { registerWatchlistTools } from './tools/watchlist.js';
 import { registerUiTools } from './tools/ui.js';
 import { registerPaneTools } from './tools/pane.js';
 import { registerTabTools } from './tools/tab.js';
-import { registerPaperTools } from './tools/paper.js';
+import { registerTradingTools } from './tools/paper.js';
 
 const server = new McpServer(
   {
@@ -60,7 +60,7 @@ Alerts: alert_create, alert_list, alert_delete
 Launch: tv_launch → auto-detect and start TradingView with CDP on any platform
 Panes: pane_list, pane_set_layout (s, 2h, 2v, 4, 6, 8), pane_focus, pane_set_symbol
 Tabs: tab_list, tab_new, tab_close, tab_switch
-Paper Trading (native only, broker id "Paper"): paper_get_status → paper_connect → paper_get_account / paper_switch_account / paper_list_positions / paper_list_orders → paper_place_order (tif DAY|WEEK|MONTH|GTD) / paper_cancel_order / paper_modify_order / paper_close_position / paper_set_brackets (mutations fail closed unless active broker is Paper)
+Trading (any connected broker): get_status → connect → get_account / switch_account / list_positions / list_orders → place_order (tif DAY|WEEK|MONTH|GTD) / cancel_order / modify_order / close_position / set_brackets (mutations require a connected broker)
 
 CONTEXT MANAGEMENT:
 - ALWAYS use summary=true on data_get_ohlcv
@@ -86,7 +86,7 @@ registerWatchlistTools(server);
 registerUiTools(server);
 registerPaneTools(server);
 registerTabTools(server);
-registerPaperTools(server);
+registerTradingTools(server);
 
 // Startup notice (stderr so it doesn't interfere with MCP stdio protocol)
 process.stderr.write('⚠  tradingview-mcp  |  Unofficial tool. Not affiliated with TradingView Inc. or Anthropic.\n');

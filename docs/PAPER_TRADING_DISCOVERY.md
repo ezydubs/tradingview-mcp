@@ -114,7 +114,7 @@ the environment is recorded.
 - Positions: `_positionService.positions()` / `activeBroker().positions()` — fields include `id` (symbol), `side` (±1), `qty`, `avgPrice`, `lastPrice`, `pl`, `extra.{pl,plPercent,usedMargin,leverage,accountCurrency}`, bracket flags.
 - Orders: `_ordersService.activeOrders()`; history via `activeBroker().ordersHistory()`.
 - Order type enum (Broker API): Limit=1, Market=2, Stop=3, StopLimit=4; side Buy=1, Sell=-1; status Filled=2 etc.
-- Durations / TIF (Capture 2 `metainfo.durations`): `DAY`, `WEEK` (UI default), `MONTH`, `GTD` (requires `datetime`). Exposed on `paper_place_order` as `tif` + `duration_datetime`.
+- Durations / TIF (Capture 2 `metainfo.durations`): `DAY`, `WEEK` (UI default), `MONTH`, `GTD` (requires `datetime`). Exposed on `place_order` as `tif` + `duration_datetime`.
 - Mutation surface on active broker: `placeOrder`, `modifyOrder`, `cancelOrder`, `closePosition`, `editPositionBrackets`, `selectBroker("Paper")`, `setCurrentAccount`.
 - `supportTrailingStop` was **false** on the observed Paper position (Capture 2) — no trailing-stop tool.
 - Account reset / createAccount exist on the broker object but are **not** exposed as MCP tools (destructive).
@@ -318,7 +318,7 @@ directly observed session, and cite the capture file.
 |------------|-----------|--------|--------------|-------------|-------|
 | Panel availability | **yes** | Capture 1 | A — `bottomWidgetBar.isWidgetEnabled('paper_trading')` | 1 capture | `false` while anonymous |
 | Panel open/closed state | **yes** | Capture 1 | A — `bottomWidgetBar.isVisible()` / `activeWidgetName()` (WatchedValues); DOM `trading-button` is fallback (C) | 1 capture | widget name is `paper_trading` |
-| Panel open/close action | **yes** | Capture 2 | A — `bottomWidgetBar.showWidget('paper_trading')` / close/hide | implemented in `paper_open_panel` | same API family as `backtesting` |
+| Panel open/close action | **yes** | Capture 2 | A — `bottomWidgetBar.showWidget('paper_trading')` / close/hide | implemented in `open_panel` | same API family as `backtesting` |
 | Active provider name | **yes** | Capture 2 | A — `activeBroker()._brokerMetainfo.id/title` | 1 capture | id is `"Paper"`, title `"Paper Trading"` |
 | Provider list | **yes** | Capture 2 | A — `brokersRegistry.getBrokersMetaInfos()` (async) | 1 capture | first entry id `"Paper"` |
 | Connection state | **yes** | Capture 1+2 | A — `trading.connectStatus()` WatchedValue | `1` connected, `3` disconnected | see section C |

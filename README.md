@@ -1,8 +1,8 @@
-# TradingView MCP Bridge
+# TradingView MCP — EzyDubs
 
 [![MCP Toplist](https://mcptoplist.com/badge/glama%2Ftradesdontlie%2Ftradingview-mcp.svg)](https://mcptoplist.com/server/glama%2Ftradesdontlie%2Ftradingview-mcp)
 
-Personal AI assistant for your TradingView Desktop charts. Connects Claude Code to your locally running TradingView app via Chrome DevTools Protocol for AI-assisted chart analysis, Pine Script development, and workflow automation.
+Personal AI assistant and execution agent for your TradingView Desktop charts. Connects your AI to a locally running TradingView app via Chrome DevTools Protocol for AI-assisted chart analysis, Pine Script development, workflow automation — and **live order execution** with any connected TradingView broker (native Paper or BlackBull cTrader). This is the **EzyDubs** fork: hardened broker trading with fail-closed mutations, order-history-based confirmation, and a strict two-indicator resource plan for cleaner charts.
 
 > [!WARNING]
 > **This tool is not affiliated with, endorsed by, or associated with TradingView Inc.** It interacts with your locally running TradingView Desktop application via Chrome DevTools Protocol. Review the [Disclaimer](#disclaimer) before use.
@@ -28,7 +28,7 @@ The debug port is disabled by default and must be explicitly enabled by you usin
 - Store, transmit, or redistribute any market data
 - Work without a valid TradingView subscription and installed Desktop app
 - Bypass any TradingView paywall or access restriction
-- Execute real trades (chart interaction only)
+- Move markets or gain better-than-market fills (fills always come from the broker's live feed)
 - Work if TradingView changes their internal Electron structure
 
 ## Research Context
@@ -66,6 +66,8 @@ Gives your AI assistant eyes and hands on your own chart:
 - **Replay practice** — step through historical bars, practice entries/exits
 - **Screenshots** — capture chart state for AI visual analysis
 - **Multi-pane layouts** — set up 2x2, 3x1, etc. grids with different symbols per pane
+- **Place and manage orders** — market/limit/stop/stop-limit with stop-loss and take-profit brackets, TIF, on any connected TradingView broker (native Paper or BlackBull)
+- **Order confirmation** — verifies fills/resting orders/rejections against the broker's order history instead of trusting an empty `placeOrder` resolve, so rejections surface as actionable errors
 - **Monitor your chart** — stream JSONL from your locally running chart for local monitoring scripts
 - **CLI access** — every MCP tool is also a `tv` CLI command, pipe-friendly with JSON output
 - **Launch TradingView** — auto-detect and launch with debug mode from any platform
@@ -74,7 +76,7 @@ Gives your AI assistant eyes and hands on your own chart:
 
 Paste this into Claude Code and it will handle the rest:
 
-> Install the TradingView MCP server. Clone https://github.com/tradesdontlie/tradingview-mcp.git, run npm install, add it to my MCP config at ~/.claude/.mcp.json, and launch TradingView with the debug port. Then verify the connection with tv_health_check.
+> Install the TradingView MCP server. Clone https://github.com/ezydubs/tradingview-mcp.git, run npm install, add it to my MCP config at ~/.claude/.mcp.json, and launch TradingView with the debug port. Then verify the connection with tv_health_check.
 
 Or follow the manual steps below.
 
@@ -83,7 +85,7 @@ Or follow the manual steps below.
 ### 1. Install
 
 ```bash
-git clone https://github.com/tradesdontlie/tradingview-mcp.git
+git clone https://github.com/ezydubs/tradingview-mcp.git
 cd tradingview-mcp
 npm install
 ```
@@ -254,6 +256,9 @@ Read `line.new()`, `label.new()`, `table.new()`, `box.new()` output from any vis
 | `symbol_info` / `symbol_search` | Symbol metadata and search |
 | `indicator_set_inputs` / `indicator_toggle_visibility` | Change indicator settings, show/hide |
 
+> [!NOTE]
+> **Two-indicator resource plan.** To keep charts clean and indicator reads readable, the EzyDubs build enforces a **maximum of 2 visible indicators at a time**. Adding a third is rejected until you remove one. Pick synergistic pairs (e.g. one trend/volume + one momentum) and swap them out per timeframe as needed.
+
 ### Multi-Pane Layouts
 
 | Tool | What it does |
@@ -311,22 +316,34 @@ Read `line.new()`, `label.new()`, `table.new()`, `box.new()` output from any vis
 | `ui_open_panel` / `ui_click` / `ui_evaluate` | UI automation |
 | `tv_launch` / `tv_health_check` / `tv_discover` | Connection management |
 
-### Paper Trading (native only)
+### Trading / Order Placement (any connected broker)
 
-Tools talk only to TradingView's **native Paper Trading** provider (stable broker id `Paper`). Mutations fail closed if any other broker is active. Evidence and paths: [docs/PAPER_TRADING_DISCOVERY.md](docs/PAPER_TRADING_DISCOVERY.md).
+Place and manage real orders with any **connected TradingView broker** (native Paper or BlackBull cTrader). Mutations are **fail-closed** — they refuse to run unless a broker is actively connected (no more `Paper`-only gate). Evidence and paths: [docs/PAPER_TRADING_DISCOVERY.md](docs/PAPER_TRADING_DISCOVERY.md) (native Paper) and [docs/BLACKBULL_CTRADER_ORDER_API.md](docs/BLACKBULL_CTRADER_ORDER_API.md) (BlackBull cTrader order-API validation surface).
+
+**How order placement was hardened.** TradingView's `placeOrder()` broker call often resolves to an empty object (BlackBull's cTrader adapter delivers failures as UI toasts instead of throwing). Rather than trust that empty resolve, the adapter now:
+
+- Snapshots the broker's order history **before** submitting, then polls for a **new** order on the same symbol/side and classifies it by status (`filled`/`working` = success; `rejected`/`cancelled` = rejection).
+- Reads "Order rejected" toasts only to enrich the reason — never as the success/failure decision.
+- Rejects orders that fail to confirm (market orders fail closed, resting orders surface a "verify with list_orders" note).
+- Serializes concurrent submissions to avoid the parallel-place "phantom confirm" bug.
+- Correctly parses account rows by on-screen label (not array index), handling broker-specific ordering and `%`-suffixed formatted strings.
+- Adds `margin_level` and per-broker account summary fields.
 
 | Tool | What it does |
 |------|-------------|
-| `paper_get_status` | Session, panel, connection, broker id, `safe_for_paper_mutation` |
-| `paper_open_panel` | Open/close/toggle Trading Panel (`paper_trading` widget) |
-| `paper_connect` | Connect broker id `Paper` |
-| `paper_get_account` / `paper_list_accounts` / `paper_switch_account` | Account summary and switch active Paper account |
-| `paper_list_positions` / `paper_list_orders` | Open positions and active/history orders |
-| `paper_place_order` | Market/limit/stop/stop_limit; optional TIF (`DAY`/`WEEK`/`MONTH`/`GTD`) and SL/TP |
-| `paper_cancel_order` / `paper_modify_order` | Manage working orders |
-| `paper_close_position` / `paper_set_brackets` | Close positions; set or clear SL/TP |
+| `get_status` | Session, panel, connection, broker id, `safe_for_paper_mutation` |
+| `open_panel` | Open/close/toggle Trading Panel (`paper_trading` widget) |
+| `connect` | Connect the currently selected broker |
+| `get_account` / `list_accounts` / `switch_account` | Account summary and switch active account |
+| `list_positions` / `list_orders` | Open positions and active/history orders |
+| `place_order` | Market/limit/stop/stop_limit; optional TIF (`DAY`/`WEEK`/`MONTH`/`GTD`) and SL/TP |
+| `cancel_order` / `modify_order` | Manage working orders |
+| `close_position` / `set_brackets` | Close positions; set or clear SL/TP |
 
 CLI: `tv paper status|panel|connect|account|accounts|switch-account|positions|orders|place|cancel|modify|close|brackets`.
+
+> [!NOTE]
+> **BlackBull cTrader (`DurationId`) caveat.** Empirical testing against BlackBull's cTrader-hosted order endpoint (demo account) found the backend is stricter than the UI advertises: the `DurationId` enum **rejects `DAY`** (and human-readable TIF names like `Day`/`GTDate`/`On Close`), accepts sub-minimum `qty` down to `0.005` vs a documented `0.01`, uses Unix-seconds (not ISO) for GTD expiry, and silently drops invalid SL/TP magnitudes. See [docs/BLACKBULL_CTRADER_ORDER_API.md](docs/BLACKBULL_CTRADER_ORDER_API.md) for the full validation surface. The native Paper broker does not share these quirks.
 
 If the MCP/CLI points at the wrong Desktop instance, set `TV_CDP_PORT` (and optionally `TV_CDP_HOST`) to the process launched with `--remote-debugging-port`.
 

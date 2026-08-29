@@ -60,6 +60,17 @@ The most impactful design decision was making all tools return compact output by
 
 The compile → error → fix loop is where agent assistance provides the most value. Pine Script has unusual semantics that even experienced programmers struggle with. Having an agent that can read errors, understand the language, and propose fixes significantly accelerates development.
 
+### Broker Backend Validation is Not the Same as the UI Surface
+
+Probing BlackBull's cTrader-hosted order endpoint (demo account) revealed that the
+server re-validates every field and its enums diverge from what the UI advertises:
+the `DurationId` enum rejects `DAY` and the human-readable TIF names (`Day`,
+`GTDate`, `On Close`, `On Auction`), accepts sub-minimum `qty` down to `0.005`
+vs a documented `0.01`, and silently drops invalid SL/TP. Details and full
+evidence: [docs/BLACKBULL_CTRADER_ORDER_API.md](docs/BLACKBULL_CTRADER_ORDER_API.md).
+This is a concrete reminder that an agent facing a real broker must verify
+server-side acceptance rather than trust tool/UI enums.
+
 ### Streaming Reveals Agent Latency Issues
 
 When streaming data changes faster than the agent can respond, the agent's reasoning becomes stale. This is a fundamental limitation of request-response LLM architectures operating on real-time data. The practical solution is using streaming for human monitoring (piped to dashboards) rather than agent consumption.

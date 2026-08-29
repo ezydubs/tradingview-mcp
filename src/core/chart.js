@@ -6,6 +6,8 @@ import { waitForChartReady as _waitForChartReady } from '../wait.js';
 
 const CHART_API = 'window.TradingViewApi._activeChartWidgetWV.value()';
 
+const MAX_VISIBLE_INDICATORS = 2;
+
 function _resolve(deps) {
   return {
     evaluate: deps?.evaluate || _evaluate,
@@ -90,6 +92,9 @@ export async function manageIndicator({ action, indicator, entity_id, inputs: in
 
   if (action === 'add') {
     const before = await evaluate(`${CHART_API}.getAllStudies().map(function(s) { return s.id; })`);
+    if (before && before.length >= MAX_VISIBLE_INDICATORS) {
+      throw new Error(`Maximum ${MAX_VISIBLE_INDICATORS} visible indicators at a time on chart. More than ${MAX_VISIBLE_INDICATORS} will not work. Remove an existing indicator first.`);
+    }
     await evaluate(`
       (function() {
         var chart = ${CHART_API};

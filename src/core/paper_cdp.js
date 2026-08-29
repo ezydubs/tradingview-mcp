@@ -46,13 +46,32 @@ export const PAGE_HELPERS = `
     } catch (e) {}
     return null;
   }
-  /** Page-side fail-closed guard for mutations (stable id "Paper"). */
-  function tvRequirePaperBroker(ab) {
+  /** Page-side guard for mutations - requires a connected broker. */
+  function tvRequireConnectedBroker(ab) {
     var id = tvBrokerId(ab);
-    if (id !== 'Paper') {
-      return { error: 'Active broker is not native Paper Trading (got ' + (id || 'null') + '). Refusing mutation.' };
+    if (!id) {
+      return { error: 'No active broker connected.' };
     }
     return null;
+  }
+  /**
+   * Read current "Order rejected" toast notifications from the Broker UI.
+   * BlackBull's cTrader adapter resolves placeOrder() to an empty object without
+   * surfacing failures, so the actual rejection reason ("Cannot map symbol: ...")
+   * is delivered as a DOM toast. Match on class substring (hashed) + title text
+   * to avoid hard-coding unstable class names.
+   */
+  function tvRejectToasts() {
+    var result = [];
+    var bases = document.querySelectorAll('[class*="toastCommonBase"]');
+    for (var i = 0; i < bases.length && result.length < 10; i++) {
+      var txt = (bases[i].innerText || '').trim();
+      if (txt.indexOf('Order rejected') !== -1) {
+        var lines = txt.split('\\n').map(function(l) { return l.trim(); }).filter(function(l) { return l && l.toLowerCase() !== 'close'; });
+        result.push({ title: lines[0] || 'Order rejected', message: lines.slice(1).join(' ').trim() });
+      }
+    }
+    return result;
   }
   function tvScalarizePosition(p) {
     if (!p || typeof p !== 'object') return null;
