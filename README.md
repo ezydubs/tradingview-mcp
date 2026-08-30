@@ -72,6 +72,14 @@ Gives your AI assistant eyes and hands on your own chart:
 - **CLI access** — every MCP tool is also a `tv` CLI command, pipe-friendly with JSON output
 - **Launch TradingView** — auto-detect and launch with debug mode from any platform
 
+## What It Looks Like
+
+AI-assisted 1H chart analysis straight from the tool — indicator readings, price levels, and annotations read live from your TradingView Desktop:
+
+<p align="center">
+  <img src="chart_current_1h.png" alt="TradingView MCP — 1H chart analysis via CDP" width="80%">
+</p>
+
 ## Install with Claude Code
 
 Paste this into Claude Code and it will handle the rest:

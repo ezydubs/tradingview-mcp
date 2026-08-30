@@ -8,7 +8,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCREENSHOT_DIR = join(dirname(dirname(__dirname)), 'screenshots');
+const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || join(dirname(dirname(__dirname)), 'screenshots');
 
 export async function batchRun({ symbols, timeframes, action, delay_ms, ohlcv_count }) {
   const tfs = timeframes && timeframes.length > 0 ? timeframes : [null];

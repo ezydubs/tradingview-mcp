@@ -591,7 +591,21 @@ export async function placeOrder({
         if (!o) return false;
         if (String(o.symbol) !== String(order.symbol)) return false;
         if (Number(o.side) !== Number(order.side)) return false;
-        if (o.qty != null && order.qty != null && Math.abs(Number(o.qty) - Number(order.qty)) > 0.0001) return false;
+        if (o.qty != null && order.qty != null) {
+          // Brokers round quantity to their lot/step precision (e.g. BTCUSD step
+          // 0.01 => 1.672 submitted becomes 1.67 stored). A strict absolute
+          // tolerance would fail to confirm a filled order. Infer the step from
+          // the stored qty decimals and accept any qty/filledQty within half a
+          // step of the submitted qty.
+          var _q = Math.abs(Number(o.qty));
+          var _p = (_q > 0 && Math.floor(_q) !== _q) ? Math.min(String(_q).split('.')[1].length, 6) : 0;
+          var step = _p > 0 ? Math.pow(10, -_p) : 0.01;
+          var sub = Number(order.qty);
+          var matchesSubmit = Math.abs(_q - sub) <= step * 0.5;
+          var fq = o.filledQty != null ? Math.abs(Number(o.filledQty)) : null;
+          if (!matchesSubmit && fq != null && fq > 0) matchesSubmit = Math.abs(fq - sub) <= step * 0.5;
+          if (!matchesSubmit) return false;
+        }
         return true;
       }
       var beforeIds = {};

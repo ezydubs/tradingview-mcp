@@ -8,7 +8,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCREENSHOT_DIR = join(dirname(dirname(__dirname)), 'screenshots');
+const SCREENSHOT_DIR = process.env.SCREENSHOT_DIR || join(dirname(dirname(__dirname)), 'screenshots');
 
 export async function captureScreenshot({ region, filename, method, waitForRender = false } = {}) {
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
