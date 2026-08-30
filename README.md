@@ -4,6 +4,10 @@
 
 Personal AI assistant and execution agent for your TradingView Desktop charts. Connects your AI to a locally running TradingView app via Chrome DevTools Protocol for AI-assisted chart analysis, Pine Script development, workflow automation — and **live order execution** with any connected TradingView broker (native Paper or BlackBull cTrader). This is the **EzyDubs** fork: hardened broker trading with fail-closed mutations, order-history-based confirmation, and a strict two-indicator resource plan for cleaner charts.
 
+<p align="center">
+  <img src="chart_current_1h.png" alt="TradingView MCP — 1H chart analysis via CDP" width="80%">
+</p>
+
 > [!WARNING]
 > **This tool is not affiliated with, endorsed by, or associated with TradingView Inc.** It interacts with your locally running TradingView Desktop application via Chrome DevTools Protocol. Review the [Disclaimer](#disclaimer) before use.
 
@@ -71,14 +75,6 @@ Gives your AI assistant eyes and hands on your own chart:
 - **Monitor your chart** — stream JSONL from your locally running chart for local monitoring scripts
 - **CLI access** — every MCP tool is also a `tv` CLI command, pipe-friendly with JSON output
 - **Launch TradingView** — auto-detect and launch with debug mode from any platform
-
-## What It Looks Like
-
-AI-assisted 1H chart analysis straight from the tool — indicator readings, price levels, and annotations read live from your TradingView Desktop:
-
-<p align="center">
-  <img src="chart_current_1h.png" alt="TradingView MCP — 1H chart analysis via CDP" width="80%">
-</p>
 
 ## Install with Claude Code
 
