@@ -42,6 +42,98 @@ fields. Responses are JSON with `{"s":"ok","d":{...}}` on success and
 - The endpoint is an undocumented internal backend; behavior can change with no
   notice. Every finding is a single-session observation unless noted.
 
+## Authentication & token acquisition
+
+The backend requires `Authorization: Bearer <access-token>`. Getting the right
+token is the single most important gotcha — it is easy to get an
+`{"s":"error","errmsg":"Authorization fail."}`.
+
+### What the token IS and is NOT
+
+- **IS:** a **~71-char, rotating OAuth access token** that the BlackBull broker
+  connection (`activeBroker()._brokerConnection`) attaches to every request to
+  `blackbull.tv.ctrader.com`. It **rotates** — a token that once passed auth may
+  be rejected later (verified: a token that passed one POST was rejected on the
+  next after a short delay), so capture it fresh immediately before use.
+- **IS NOT** the TradingView web-session JWT at `window.user.auth_token` (that
+  is an 846-char JWT that is **rejected** by this backend → `Authorization
+  fail.`). The long renderer JWT is unrelated to the BlackBull cTrader OAuth
+  token; using it is the #1 cause of the auth error.
+
+The access token lives in a **closure** inside the broker connection's
+`_oAuth2AuthorizationProvider` (no public getter), so it cannot be read by
+listing object keys. It is exposed in practice only by observing an **actual
+authenticated request**.
+
+### How to capture it (fetch interceptor)
+
+The renderer's broker adapter makes real authenticated calls (positions,
+ordersHistory, quotes, state) against `blackbull.tv.ctrader.com`. Hook
+`window.fetch` to record the `Authorization` header, then **trigger** one of
+those calls. Because `tradingview_ui_evaluate` tears down async contexts, run
+the trigger and the read as **two separate evaluates**:
+
+1. Install a fetch hook AND trigger a broker call (this persists in the page):
+
+```js
+/* evaluate #1 (async — its return is ignored; it sets window.__hdrArr) */
+(async function(){
+  window.__hdrArr = [];
+  var origF = window.fetch;
+  if (!window.__hooked) {
+    window.__hooked = true;
+    window.fetch = function(url, opts){
+      try {
+        var u = (typeof url === 'string' ? url : (url && url.url) || '');
+        if (u.indexOf('blackbull.tv.ctrader.com') !== -1 && opts && opts.headers) {
+          var hdrs = (opts.headers instanceof Headers) ? Object.fromEntries(opts.headers.entries()) : opts.headers;
+          window.__hdrArr.push({ hdrs: hdrs });
+        }
+      } catch(e){}
+      return origF.apply(this, arguments);
+    };
+  }
+  var t = window.TradingView && window.TradingView.bottomWidgetBar &&
+    window.TradingView.bottomWidgetBar._widgetControllers &&
+    window.TradingView.bottomWidgetBar._widgetControllers.get('paper_trading') &&
+    window.TradingView.bottomWidgetBar._widgetControllers.get('paper_trading')._trading;
+  var ab = t && t.activeBroker ? (t.activeBroker.value ? t.activeBroker.value() : t.activeBroker()) : null;
+  try { if (ab && ab.positions) await ab.positions(); } catch(e){}
+  await new Promise(r => setTimeout(r, 700));
+  return {};
+})()
+```
+
+2. Read the freshest captured token (synchronous evaluate):
+
+```js
+(function(){
+  var arr = window.__hdrArr || [];
+  var tok = null;
+  for (var i = arr.length - 1; i >= 0; i--){
+    var h = arr[i].hdrs;
+    for (var k in h){ if (/authorization/i.test(k)){ var v = String(h[k]); if (v.indexOf('Bearer ') !== -1 && v.length < 200){ tok = v.slice(7); break; } } }
+    if (tok) break;
+  }
+  return { token: tok };
+})()
+```
+
+Use the returned value verbatim as `Authorization: Bearer <token>` on the raw
+HTTP calls. This token works from **direct Node `fetch`** (no page-context
+requirement) — the earlier "must run via page XHR" assumption only applied
+because the page token used then was the wrong one. Because it rotates, either
+re-capture immediately before each batch or fail-and-retry on `Authorization
+fail.`.
+
+Observed authenticated endpoints the broker calls (all `Bearer`-auth'd,
+`locale=en`):
+- `GET /accounts/{id}/ordersHistory?locale=en&...`
+- `GET /accounts/{id}/orders?locale=en`
+- `GET /accounts/{id}/positions?locale=en` → `{"s":"ok","d":[{id,instrument,qty,side,avgPrice,...}]}`
+- `GET /accounts/{id}/state?locale=en`
+- `GET /quotes?locale=en&symbols=BTCUSD&accountId={id}`
+
 ## Environment record
 
 | Field | Value |
@@ -52,8 +144,8 @@ fields. Responses are JSON with `{"s":"ok","d":{...}}` on success and
 | Live accounts seen | `48466898`, `48475221` — **not touched** (live; out of scope) |
 | Transport | HTTPS `POST` to `blackbull.tv.ctrader.com/accounts/48466618/orders` |
 | Encoding | `application/x-www-form-urlencoded`, camelCase field names |
-| Auth | `Authorization: Bearer <session-token>` (from renderer global) |
-| Probe method | synchronous `XMLHttpRequest` via `tradingview_ui_evaluate` (single call runs each request atomically — reliable; async `fetch` loops were abandoned because page navigation tears down the async context) |
+| Auth | `Authorization: Bearer <access-token>` — a **71-char rotating OAuth access token** held in the broker connection's OAuth2 provider closure (NOT `window.user.auth_token`; see [Authentication & token acquisition](#authentication--token-acquisition)) |
+| Probe method | synchronous `XMLHttpRequest` inside `tradingview_ui_evaluate`, or raw Node `fetch` with a freshly captured token (single call runs each request atomically — reliable; async `fetch` loops were abandoned because page navigation tears down the async context) |
 | Instrument probed | `BTCUSD` (spot) unless noted |
 | Account state | left flat (0 positions / 0 orders) after each fuzz batch |
 
@@ -305,6 +397,11 @@ request and each followed by closing/cancelling the created state:
 
 | Finding | Reproduced result |
 |---------|-------------------|
+| Wrong token rejected | `Authorization: Bearer <window.user.auth_token>` (846-char JWT) → `{"s":"error","errmsg":"Authorization fail."}` on every POST, even from in-page sync-XHR |
+| Correct token via interceptor | Captured ~71-char OAuth token from a live broker `positions()` call; used with **direct Node `fetch`** POST `side=sell&type=market&instrument=BTCUSD&qty=0.005&currentBid=1&currentAsk=2` → `{"s":"ok","d":{"orderId":"28075483"}}` (filled, position created) |
+| Backend non-null requirement | First POST without `currentAsk`/`currentBid` → `currentAsk, currentBid must not be null`; adding them (values ignored for pricing) parses OK |
+| Read + close positions via HTTP | `GET /accounts/{id}/positions?locale=en` → `{"s":"ok","d":[{id,instrument,qty,side,avgPrice,...}]}`; `DELETE /accounts/{id}/positions/{pid}?locale=en` (body `qty=0.01`) → `{"s":"ok"}` (position closed, account left flat) |
+| Close without `locale` | `DELETE /positions/{pid}` (no `?locale=en`) → `{"s":"error","errmsg":"Required parameter 'locale' is missing"}` |
 | `DurationId.DAY` bug | `'durationType' Failed to convert ... No enum constant com.xtrader.tva.pojo.DurationId.DAY` |
 | Sub-min qty `0.005` | `{"s":"ok",...}` created a 0.005 position on a market sell |
 | 2-digit price rule | `Order price = 79500.555 has more digits than symbol allows. Allowed 2 digits` |
@@ -332,9 +429,12 @@ can move or inflate the market, nor achieve a better-than-market fill.
   TradingView integration), accounts via `/accounts/<id>/orders`.
 - `currentAsk` / `currentBid` are accepted but **not trusted for fill pricing**
   (server prices fills from its own feed).
-- The renderer holds an `Authorization` session token usable to speak to the
-  backend directly; the backend re-validates every field (it is not merely
-  client-side).
+- The working bearer is a **~71-char rotating OAuth access token** from the
+  broker connection's OAuth2 provider closure, captured via a fetch interceptor
+  (see [Authentication & token acquisition](#authentication--token-acquisition)).
+  `window.user.auth_token` (846-char JWT) is **rejected** by this backend.
+- The token works from **direct Node `fetch`**, not just in-page XHR, and
+  re-validates every field server-side (it is not merely client-side).
 - Reuse across many rapid requests is fine; orders that fill create positions,
   orders that don't fill (limit below market) become `working` orders.
 
